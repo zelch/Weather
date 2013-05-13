@@ -1,0 +1,72 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use QtCore4;
+use QtGui4;
+use QtCore4::debug qw(ambiguous);
+use Data::Dumper;
+
+my $zone_forecast_url = "http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz119.txt";
+my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
+
+{
+    package MainWindow;
+    use QtCore4;
+    use QtCore4::isa qw( Qt::Dialog );
+    use QtCore4::slots button_exit => [];
+
+    sub button_exit {
+	print "Exiting.\n";
+	exit(0);
+    }
+
+    sub NEW {
+	my ($class, $parent) = @_;
+	$class->SUPER::NEW($parent);
+
+	my $vbox = Qt::VBoxLayout($_);
+
+	my $form = Qt::FormLayout();
+	$form->addRow(Qt::Label(this->tr('Temperature')), Qt::Label('55 F'));
+
+	my $hello = Qt::PushButton( 'Hello, World!', $_ );
+	$vbox->addWidget($hello);
+
+	$vbox->addWidget($form);
+
+	my $button = Qt::PushButton( 'Exit.', $_ );
+	$vbox->addWidget($button);
+	this->connect($button, SIGNAL 'clicked()', this, SLOT 'button_exit()');
+	setLayout($vbox);
+
+    }
+}
+
+{
+    package main;
+    use MainWindow;
+    use Geo::WeatherNOAA;
+
+    my $app = Qt::Application( \@ARGV );
+
+    my $window = MainWindow();
+    $window->resize(250, 150);
+    $window->setWindowTitle("Test!");
+
+    my $hello = Qt::PushButton( 'Hello, World!', undef );
+    #$hello->setSizePolicy(Qt::SizePolicy::Expanding, Qt::SizePolicy::Expanding);
+    #$window->addWidget($hello);
+    $window->show();
+
+    my @tmp = get_city_zone('Dallas', 'TX', undef, 'get');
+    print Dumper(\@tmp);
+    @tmp = process_city_hourly('Dallas', 'TX', undef, 'get');
+    print Dumper(\@tmp);
+
+    exit $app->exec();
+
+    sub clicked {
+	print "He said hello?\n";
+    }
+}
