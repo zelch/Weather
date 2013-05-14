@@ -7,14 +7,10 @@ use QtGui4;
 use QtCore4::debug qw(ambiguous);
 use Data::Dumper;
 
-my $zone_forecast_url = "http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz119.txt";
-my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
-
 {
     package Radar;
     use QtCore4;
     use QtCore4::isa qw( Qt::Dialog );
-    use QtCore4::slots button_exit => [], update => [];
     use Data::Dumper;
 
     sub NEW {
@@ -33,8 +29,6 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
 	this->{radar}->setScaledContents(1);
 	$vbox->addWidget(this->{radar});
 	setLayout($vbox);
-
-	update();
     }
 
     sub update {
@@ -52,7 +46,6 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
     package Forecast;
     use QtCore4;
     use QtCore4::isa qw( Qt::Dialog );
-    use QtCore4::slots button_exit => [], update => [];
     use Data::Dumper;
 
     sub NEW {
@@ -72,26 +65,6 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
 	this->{text}->setReadOnly(1);
 	$vbox->addWidget(this->{text});
 	setLayout($vbox);
-
-
-	my $hbox = Qt::HBoxLayout();
-
-	my $button = Qt::PushButton( 'Update', $_ );
-	$hbox->addWidget($button);
-	this->connect($button, SIGNAL 'clicked()', this, SLOT 'update()');
-
-	$button = Qt::PushButton( 'Exit', $_ );
-	$hbox->addWidget($button);
-	this->connect($button, SIGNAL 'clicked()', this, SLOT 'button_exit()');
-
-	$vbox->addLayout($hbox);
-
-	this->update();
-    }
-
-    sub button_exit {
-	print "Exiting.\n";
-	exit(0);
     }
 
     sub update {
@@ -145,7 +118,6 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
     package Conditions;
     use QtCore4;
     use QtCore4::isa qw( Qt::Dialog );
-    use QtCore4::slots button_exit => [], update => [];
     use LWP::UserAgent;
     use XML::Simple;
     use Data::Dumper;
@@ -176,11 +148,6 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
 	}
 
 
-    }
-
-    sub button_exit {
-	print "Exiting.\n";
-	exit(0);
     }
 
     sub update {
@@ -219,7 +186,7 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
 	this->{config} = $config;
 	this->{xs} = XML::Simple->new();
 
-	my $vbox = Qt::VBoxLayout($_);
+	my $hbox = Qt::HBoxLayout($_);
 
 	my $form = Qt::FormLayout();
 #	$form->addRow(Qt::Label(this->tr('Temperature')), Qt::Label(this->{current}->{"temp_" . lc($unit_t)} . " " . uc($unit_t)));
@@ -236,7 +203,6 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
 	this->{label}->{visibility} = Qt::Label('-');
 	this->{label}->{image} = Qt::Label();
 
-	$form->addWidget(this->{label}->{image});
 	$form->addRow("Location:", this->{label}->{location});
 	$form->addRow("Last Updated:", this->{label}->{updated});
 	$form->addRow("Conditions:", this->{label}->{weather});
@@ -250,7 +216,61 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
 	#$form->addWidget(Qt::Label(this->tr('Feels LIke')));
 	#$form->addWidget(this->{label}->{feels_like});
 
-	$vbox->addLayout($form);
+	$hbox->addLayout($form);
+
+	$hbox->addWidget(this->{label}->{image});
+	$hbox->setAlignment(this->{label}->{image}, Qt::AlignRight() | Qt::AlignTop());
+
+	setLayout($hbox);
+    }
+}
+
+{
+    package App;
+    use Conditions;
+    use Forecast;
+    use Radar;
+    use LWP::UserAgent;
+    use QtCore4;
+    use QtCore4::slots button_exit => [], update => [];
+    use QtCore4::isa qw( Qt::Application );
+
+    my %config = (
+	radar_url => 'http://i.imwx.com//web/radar/us_dfw_ultraradar_plus_usen.jpg',
+	forecast_url => 'http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz119.txt',
+	conditions_url => 'http://w1.weather.gov/xml/current_obs/KDFW.xml',
+	pressure_unit => 'mb',
+	wind_unit => 'mph',
+	temp_unit => 'f',
+    );
+
+    my ($conditions, $forecast, $radar);
+
+    sub NEW {
+	shift->SUPER::NEW(@_);
+
+	my $ua = LWP::UserAgent->new;
+	$ua->agent("weather/0.00");
+
+	$conditions = Conditions();
+	$conditions->init($ua, \%config);
+
+	$forecast = Forecast();
+	$forecast->init($ua, \%config);
+
+	$radar = Radar();
+	$radar->init($ua, \%config);
+
+	my $window = Qt::Dialog();
+	my $layout = Qt::GridLayout();
+
+	my $tabs = Qt::TabWidget();
+#$window->resize(250, 150);
+	$window->setWindowTitle("Weather");
+	$tabs->addTab($conditions, "Current Conditions");
+	$tabs->addTab($forecast, "Forecast");
+	$tabs->addTab($radar, "Radar");
+	$layout->addWidget($tabs, 0, 0);
 
 
 	my $hbox = Qt::HBoxLayout();
@@ -263,55 +283,33 @@ my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
 	$hbox->addWidget($button);
 	this->connect($button, SIGNAL 'clicked()', this, SLOT 'button_exit()');
 
-	$vbox->addLayout($hbox);
+	$layout->addLayout($hbox, 1, 0);
 
-	setLayout($vbox);
+	$window->setLayout($layout);
 
-	this->update();
+	$window->show();
+
+	Qt::Timer::singleShot(1, this, SLOT 'update()');
+
+	this->exec();
     }
+
+    sub button_exit {
+	exit(0);
+    }
+
+    sub update {
+	$conditions->update();
+	$forecast->update();
+	$radar->update();
+    }
+
 }
+
 
 {
     package main;
-    use Conditions;
-    use Forecast;
-    use Radar;
-    use LWP::UserAgent;
+    use App;
 
-    my %config = (
-	radar_url => 'http://i.imwx.com//web/radar/us_dfw_ultraradar_plus_usen.jpg',
-	forecast_url => 'http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz119.txt',
-	conditions_url => 'http://w1.weather.gov/xml/current_obs/KDFW.xml',
-	pressure_unit => 'mb',
-	wind_unit => 'mph',
-	temp_unit => 'f',
-    );
-
-    my $app = Qt::Application( \@ARGV );
-
-    my $ua = LWP::UserAgent->new;
-    $ua->agent("weather/0.00");
-
-
-    my $conditions = Conditions();
-    $conditions->init($ua, \%config);
-
-    my $forecast = Forecast();
-    $forecast->init($ua, \%config);
-
-    my $radar = Radar();
-    $radar->init($ua, \%config);
-
-
-    my $tabs = Qt::TabWidget();
-    #$window->resize(250, 150);
-    $tabs->setWindowTitle("Weather");
-    $tabs->addTab($conditions, "Current Conditions");
-    $tabs->addTab($forecast, "Forecast");
-    $tabs->addTab($radar, "Radar");
-    $tabs->show();
-
-#    $window->show();
-
-    exit $app->exec();
+    my $app = App(@ARGV);
 }
