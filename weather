@@ -11,62 +11,307 @@ my $zone_forecast_url = "http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz1
 my $conditions_url = 'http://w1.weather.gov/xml/current_obs/KDFW.xml';
 
 {
-    package MainWindow;
+    package Radar;
     use QtCore4;
     use QtCore4::isa qw( Qt::Dialog );
-    use QtCore4::slots button_exit => [];
+    use QtCore4::slots button_exit => [], update => [];
+    use Data::Dumper;
+
+    sub NEW {
+	my ($class, $parent, $ua) = @_;
+	$class->SUPER::NEW($parent);
+    }
+
+    sub init {
+	my ($ua, $config) = @_;
+
+	this->{ua} = $ua;
+	this->{config} = $config;
+
+	my $vbox = Qt::VBoxLayout($_);
+	this->{radar} = Qt::Label();
+	this->{radar}->setScaledContents(1);
+	$vbox->addWidget(this->{radar});
+	setLayout($vbox);
+
+	update();
+    }
+
+    sub update {
+	my $icon_req = HTTP::Request->new(GET => this->{config}->{radar_url});
+	my $res = this->{ua}->request($icon_req);
+	if ($res->is_success) {
+	    this->{radar_image} = Qt::Pixmap;
+	    this->{radar_image}->loadFromData($res->content, length($res->content));
+	    this->{radar}->setPixmap(this->{radar_image});
+	}
+    }
+}
+
+{
+    package Forecast;
+    use QtCore4;
+    use QtCore4::isa qw( Qt::Dialog );
+    use QtCore4::slots button_exit => [], update => [];
+    use Data::Dumper;
+
+    sub NEW {
+	my ($class, $parent, $ua) = @_;
+	$class->SUPER::NEW($parent);
+    }
+
+    sub init {
+	my ($ua, $config) = @_;
+
+	this->{ua} = $ua;
+	this->{config} = $config;
+
+	my $vbox = Qt::VBoxLayout($_);
+	this->{text} = Qt::PlainTextEdit();
+	this->{text}->setPlainText("");
+	this->{text}->setReadOnly(1);
+	$vbox->addWidget(this->{text});
+	setLayout($vbox);
+
+
+	my $hbox = Qt::HBoxLayout();
+
+	my $button = Qt::PushButton( 'Update', $_ );
+	$hbox->addWidget($button);
+	this->connect($button, SIGNAL 'clicked()', this, SLOT 'update()');
+
+	$button = Qt::PushButton( 'Exit', $_ );
+	$hbox->addWidget($button);
+	this->connect($button, SIGNAL 'clicked()', this, SLOT 'button_exit()');
+
+	$vbox->addLayout($hbox);
+
+	this->update();
+    }
 
     sub button_exit {
 	print "Exiting.\n";
 	exit(0);
     }
 
+    sub update {
+	this->get_forecast();
+    }
+
+    sub get_forecast {
+	delete this->{current};
+
+	my $req = HTTP::Request->new(GET => this->{config}->{forecast_url});
+	#$req->content_type('application/x-www-form-urlencoded');
+	#$req->content('query=libwww-perl&mode=dist');
+
+	# Pass request to the user agent and get a response back
+	my $res = this->{ua}->request($req);
+
+	# Check the outcome of the response
+	if ($res->is_success) {
+	    my $text = $res->content();
+
+	    my @text = split(/\n/, $text);
+#	    print Dumper(\@text);
+	    $text = "";
+	    my $day = undef;
+	    for my $line (@text) {
+		if ($line =~ /^\.([^.]+)\.\.\.(.*)/) {
+		    if (defined($day)) {
+			$text .= "\n\n";
+		    }
+
+		    $day = $1;
+		    $text .= "$day\n";
+		    chomp $2;
+		    $text .= $2;
+		} elsif ($line =~ /^\$\$$/) {
+		    last;
+		} elsif (defined($day)) {
+		    $text .= " $line";
+		}
+	    }
+
+	    this->{text}->setPlainText($text);
+	}
+	else {
+	    print $res->status_line, "\n";
+	}
+    }
+}
+
+{
+    package Conditions;
+    use QtCore4;
+    use QtCore4::isa qw( Qt::Dialog );
+    use QtCore4::slots button_exit => [], update => [];
+    use LWP::UserAgent;
+    use XML::Simple;
+    use Data::Dumper;
+
+    sub get_current {
+	delete this->{current};
+
+	my $req = HTTP::Request->new(GET => this->{config}->{conditions_url});
+	#$req->content_type('application/x-www-form-urlencoded');
+	#$req->content('query=libwww-perl&mode=dist');
+
+	# Pass request to the user agent and get a response back
+	my $res = this->{ua}->request($req);
+
+	# Check the outcome of the response
+	if ($res->is_success) {
+	    this->{current} = this->{xs}->XMLin($res->content);
+
+	    my $icon_req = HTTP::Request->new(GET => this->{current}->{icon_url_base} . this->{current}->{icon_url_name});
+	    $res = this->{ua}->request($icon_req);
+	    if ($res->is_success) {
+		this->{current}->{image} = Qt::Pixmap;
+		this->{current}->{image}->loadFromData($res->content, length($res->content));
+	    }
+	}
+	else {
+	    print $res->status_line, "\n";
+	}
+
+
+    }
+
+    sub button_exit {
+	print "Exiting.\n";
+	exit(0);
+    }
+
+    sub update {
+	this->get_current();
+
+	my $unit_t = this->{config}->{temp_unit};
+	my $unit_w = this->{config}->{wind_unit};
+	my $unit_p = this->{config}->{pressure_unit};
+
+	this->{label}->{temp}->setText(this->{current}->{"temp_" . lc($unit_t)} . " " . uc($unit_t));
+	this->{label}->{feels_like}->setText(this->{current}->{"heat_index_" . lc($unit_t)} . " " . uc($unit_t));
+	this->{label}->{weather}->setText(this->{current}->{weather});
+	this->{label}->{pressure}->setText(this->{current}->{'pressure_' . lc($unit_p)} . " " . uc($unit_p));
+	if (defined(this->{label}->{wind_gust})) {
+	    this->{label}->{wind}->setText(this->{current}->{'wind_dir'} . " / " . this->{current}->{'wind_' . lc($unit_w)} . " " . uc($unit_w) . " gusting to " . this->{current}->{'wind_gust_' . lc($unit_w)} . " " . uc($unit_w));
+	} else {
+	    this->{label}->{wind}->setText(this->{current}->{'wind_dir'} . " / " . this->{current}->{'wind_' . lc($unit_w)} . " " . uc($unit_w));
+	}
+	this->{label}->{location}->setText(this->{current}->{location});
+	this->{label}->{updated}->setText(this->{current}->{observation_time_rfc822});
+	this->{label}->{humidity}->setText(this->{current}->{relative_humidity} . ' %');
+	this->{label}->{dew_point}->setText(this->{current}->{'dewpoint_' . lc($unit_t)} . " " . uc($unit_t));
+	this->{label}->{visibility}->setText(this->{current}->{visibility_mi} . ' miles');
+	this->{label}->{image}->setPixmap(this->{current}->{image});
+    }
+
     sub NEW {
-	my ($class, $parent) = @_;
+	my ($class, $parent, $ua) = @_;
 	$class->SUPER::NEW($parent);
+    }
+
+    sub init {
+	my ($ua, $config) = @_;
+
+	this->{ua} = $ua;
+	this->{config} = $config;
+	this->{xs} = XML::Simple->new();
 
 	my $vbox = Qt::VBoxLayout($_);
 
 	my $form = Qt::FormLayout();
-	$form->addRow(Qt::Label(this->tr('Temperature')), Qt::Label('55 F'));
+#	$form->addRow(Qt::Label(this->tr('Temperature')), Qt::Label(this->{current}->{"temp_" . lc($unit_t)} . " " . uc($unit_t)));
+	#$form->addWidget(Qt::Label(this->tr('Temperature')));
+	this->{label}->{temp} = Qt::Label('-');
+	this->{label}->{feels_like} = Qt::Label('-');
+	this->{label}->{weather} = Qt::Label('-');
+	this->{label}->{pressure} = Qt::Label('-');
+	this->{label}->{wind} = Qt::Label('-');
+	this->{label}->{location} = Qt::Label('-');
+	this->{label}->{updated} = Qt::Label('-');
+	this->{label}->{humidity} = Qt::Label('-');
+	this->{label}->{dew_point} = Qt::Label('-');
+	this->{label}->{visibility} = Qt::Label('-');
+	this->{label}->{image} = Qt::Label();
 
-	my $hello = Qt::PushButton( 'Hello, World!', $_ );
-	$vbox->addWidget($hello);
+	$form->addWidget(this->{label}->{image});
+	$form->addRow("Location:", this->{label}->{location});
+	$form->addRow("Last Updated:", this->{label}->{updated});
+	$form->addRow("Conditions:", this->{label}->{weather});
+	$form->addRow("Temperature:", this->{label}->{temp});
+	$form->addRow("Feels Like:", this->{label}->{feels_like});
+	$form->addRow("Dew point:", this->{label}->{dew_point});
+	$form->addRow("Relative humidity:", this->{label}->{humidity});
+	$form->addRow("Wind:", this->{label}->{wind});
+	$form->addRow("Pressure:", this->{label}->{pressure});
+	$form->addRow("Visibility:", this->{label}->{visibility});
+	#$form->addWidget(Qt::Label(this->tr('Feels LIke')));
+	#$form->addWidget(this->{label}->{feels_like});
 
-	$vbox->addWidget($form);
+	$vbox->addLayout($form);
 
-	my $button = Qt::PushButton( 'Exit.', $_ );
-	$vbox->addWidget($button);
+
+	my $hbox = Qt::HBoxLayout();
+
+	my $button = Qt::PushButton( 'Update', $_ );
+	$hbox->addWidget($button);
+	this->connect($button, SIGNAL 'clicked()', this, SLOT 'update()');
+
+	$button = Qt::PushButton( 'Exit', $_ );
+	$hbox->addWidget($button);
 	this->connect($button, SIGNAL 'clicked()', this, SLOT 'button_exit()');
+
+	$vbox->addLayout($hbox);
+
 	setLayout($vbox);
 
+	this->update();
     }
 }
 
 {
     package main;
-    use MainWindow;
-    use Geo::WeatherNOAA;
+    use Conditions;
+    use Forecast;
+    use Radar;
+    use LWP::UserAgent;
+
+    my %config = (
+	radar_url => 'http://i.imwx.com//web/radar/us_dfw_ultraradar_plus_usen.jpg',
+	forecast_url => 'http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz119.txt',
+	conditions_url => 'http://w1.weather.gov/xml/current_obs/KDFW.xml',
+	pressure_unit => 'mb',
+	wind_unit => 'mph',
+	temp_unit => 'f',
+    );
 
     my $app = Qt::Application( \@ARGV );
 
-    my $window = MainWindow();
-    $window->resize(250, 150);
-    $window->setWindowTitle("Test!");
+    my $ua = LWP::UserAgent->new;
+    $ua->agent("weather/0.00");
 
-    my $hello = Qt::PushButton( 'Hello, World!', undef );
-    #$hello->setSizePolicy(Qt::SizePolicy::Expanding, Qt::SizePolicy::Expanding);
-    #$window->addWidget($hello);
-    $window->show();
 
-    my @tmp = get_city_zone('Dallas', 'TX', undef, 'get');
-    print Dumper(\@tmp);
-    @tmp = process_city_hourly('Dallas', 'TX', undef, 'get');
-    print Dumper(\@tmp);
+    my $conditions = Conditions();
+    $conditions->init($ua, \%config);
+
+    my $forecast = Forecast();
+    $forecast->init($ua, \%config);
+
+    my $radar = Radar();
+    $radar->init($ua, \%config);
+
+
+    my $tabs = Qt::TabWidget();
+    #$window->resize(250, 150);
+    $tabs->setWindowTitle("Weather");
+    $tabs->addTab($conditions, "Current Conditions");
+    $tabs->addTab($forecast, "Forecast");
+    $tabs->addTab($radar, "Radar");
+    $tabs->show();
+
+#    $window->show();
 
     exit $app->exec();
-
-    sub clicked {
-	print "He said hello?\n";
-    }
 }
