@@ -166,10 +166,14 @@ use Data::Dumper;
 	my $unit_p = this->{config}->{pressure_unit};
 
 	this->{label}->{temp}->setText(this->{current}->{"temp_" . lc($unit_t)} . " " . uc($unit_t));
-	this->{label}->{feels_like}->setText(this->{current}->{"heat_index_" . lc($unit_t)} . " " . uc($unit_t));
+	if (defined(this->{current}->{"heat_index_" . lc($unit_t)})) {
+	    this->{label}->{feels_like}->setText(this->{current}->{"heat_index_" . lc($unit_t)} . " " . uc($unit_t));
+	} else {
+	    this->{label}->{feels_like}->setText(this->{current}->{"temp_" . lc($unit_t)} . " " . uc($unit_t));
+	}
 	this->{label}->{weather}->setText(this->{current}->{weather});
 	this->{label}->{pressure}->setText(this->{current}->{'pressure_' . lc($unit_p)} . " " . uc($unit_p));
-	if (defined(this->{label}->{wind_gust})) {
+	if (defined(this->{current}->{'wind_gust_' . lc($unit_w)})) {
 	    this->{label}->{wind}->setText(this->{current}->{'wind_dir'} . " / " . this->{current}->{'wind_' . lc($unit_w)} . " " . uc($unit_w) . " gusting to " . this->{current}->{'wind_gust_' . lc($unit_w)} . " " . uc($unit_w));
 	} else {
 	    this->{label}->{wind}->setText(this->{current}->{'wind_dir'} . " / " . this->{current}->{'wind_' . lc($unit_w)} . " " . uc($unit_w));
@@ -245,6 +249,7 @@ use Data::Dumper;
 
     my %config = (
 #	radar_url => 'http://i.imwx.com//web/radar/us_dfw_ultraradar_plus_usen.jpg',
+#	radar_url => 'http://i.imwx.com//web/radar/us_dfw_closeradar_plus_usen.jpg',
 	radar_url => 'http://belo.bimedia.net/WFAA/weather/animated-loops/ssite/640x480/dma.gif',
 	forecast_url => 'http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz119.txt',
 	conditions_url => 'http://w1.weather.gov/xml/current_obs/KDFW.xml',
