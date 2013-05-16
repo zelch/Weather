@@ -35,9 +35,17 @@ use Data::Dumper;
 	my $icon_req = HTTP::Request->new(GET => this->{config}->{radar_url});
 	my $res = this->{ua}->request($icon_req);
 	if ($res->is_success) {
-	    this->{radar_image} = Qt::Pixmap;
-	    this->{radar_image}->loadFromData($res->content, length($res->content));
-	    this->{radar}->setPixmap(this->{radar_image});
+	    #this->{radar_image} = Qt::Pixmap;
+	    #this->{radar_image}->loadFromData($res->content, length($res->content));
+	    #this->{radar}->setPixmap(this->{radar_image});
+	    this->{buffer} = Qt::Buffer();
+	    this->{buffer}->open(Qt::Buffer::ReadWrite());
+	    this->{buffer}->writeData($res->content, length($res->content));
+#	    $buffer->setData($res->content, length($res->content));
+	    this->{radar_image} = Qt::Movie(this->{buffer});
+#	    this->{radar_image}->setCacheMode(1);
+	    this->{radar}->setMovie(this->{radar_image});
+	    this->{radar_image}->start();
 	}
     }
 }
@@ -236,7 +244,8 @@ use Data::Dumper;
     use QtCore4::isa qw( Qt::Application );
 
     my %config = (
-	radar_url => 'http://i.imwx.com//web/radar/us_dfw_ultraradar_plus_usen.jpg',
+#	radar_url => 'http://i.imwx.com//web/radar/us_dfw_ultraradar_plus_usen.jpg',
+	radar_url => 'http://belo.bimedia.net/WFAA/weather/animated-loops/ssite/640x480/dma.gif',
 	forecast_url => 'http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz119.txt',
 	conditions_url => 'http://w1.weather.gov/xml/current_obs/KDFW.xml',
 	pressure_unit => 'mb',
