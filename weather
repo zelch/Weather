@@ -184,6 +184,15 @@ use Data::Dumper;
 	this->{label}->{dew_point}->setText(this->{current}->{'dewpoint_' . lc($unit_t)} . " " . uc($unit_t));
 	this->{label}->{visibility}->setText(this->{current}->{visibility_mi} . ' miles');
 	this->{label}->{image}->setPixmap(this->{current}->{image});
+	if (defined(this->{window})) {
+	    this->{window}->setWindowTitle(this->{current}->{"temp_" . lc($unit_t)} . " " . uc($unit_t) . " / " . this->{current}->{weather});
+	}
+
+    }
+
+    sub set_window {
+	my ($window) = @_;
+	this->{window} = $window;
     }
 
     sub NEW {
@@ -250,6 +259,9 @@ use Data::Dumper;
     my %config = (
 #	radar_url => 'http://i.imwx.com//web/radar/us_dfw_ultraradar_plus_usen.jpg',
 #	radar_url => 'http://i.imwx.com//web/radar/us_dfw_closeradar_plus_usen.jpg',
+#	radar_url => 'http://i.imwx.com/looper/archive/us_dfw_closeradar_plus_usen/1L.jpg',
+#	http://i.imwx.com/looper/archive/us_dfw_closeradar_plus_usen/5L.jpg?1368945427177
+#	http://i.imwx.com/looper/archive/us_dfw_closeradar_plus_usen/1L.jpg?1368945427177
 	radar_url => 'http://belo.bimedia.net/WFAA/weather/animated-loops/ssite/640x480/dma.gif',
 	forecast_url => 'http://weather.noaa.gov/pub/data/forecasts/zone/tx/txz119.txt',
 	conditions_url => 'http://w1.weather.gov/xml/current_obs/KDFW.xml',
@@ -304,6 +316,8 @@ use Data::Dumper;
 	$window->show();
 
 	Qt::Timer::singleShot(1, this, SLOT 'update()');
+
+	$conditions->set_window($window);
 
 	this->exec();
     }
