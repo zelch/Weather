@@ -255,6 +255,7 @@ use Data::Dumper;
     use QtCore4;
     use QtCore4::slots button_exit => [], update => [];
     use QtCore4::isa qw( Qt::Application );
+    use Data::Dumper;
 
     my %config = (
 #	radar_url => 'http://i.imwx.com//web/radar/us_dfw_ultraradar_plus_usen.jpg',
@@ -268,6 +269,7 @@ use Data::Dumper;
 	pressure_unit => 'mb',
 	wind_unit => 'mph',
 	temp_unit => 'f',
+	update_time => 15 * 60000, # Every 15 minutes.
     );
 
     my ($conditions, $forecast, $radar);
@@ -316,6 +318,7 @@ use Data::Dumper;
 	$window->show();
 
 	Qt::Timer::singleShot(1, this, SLOT 'update()');
+	this->startTimer($config{update_time});
 
 	$conditions->set_window($window);
 
@@ -324,6 +327,11 @@ use Data::Dumper;
 
     sub button_exit {
 	exit(0);
+    }
+
+    sub timerEvent {
+	print STDERR "Starting update from timerEvent at " . time() . ".\n";
+	update();
     }
 
     sub update {
