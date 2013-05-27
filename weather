@@ -318,7 +318,9 @@ use Data::Dumper;
 	$window->show();
 
 	Qt::Timer::singleShot(1, this, SLOT 'update()');
-	this->startTimer($config{update_time});
+	my $id = this->startTimer($config{update_time});
+	print "Update ID: $id\n";
+	this->{update_id} = $id;
 
 	$conditions->set_window($window);
 
@@ -330,7 +332,12 @@ use Data::Dumper;
     }
 
     sub timerEvent {
-	print STDERR "Starting update from timerEvent at " . time() . ".\n";
+	my ($event) = @_;
+	if (this->{update_id} != $event->timerId()) {
+	    #print STDERR "Unknown timerEvent at " . time() . " (" . $event->timerId() . " != " . this->{update_id} . ").\n";
+	    return;
+	}
+	print STDERR "Starting update from timerEvent at " . time() . " (" . $event->timerId() . ").\n";
 	update();
     }
 
