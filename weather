@@ -34,6 +34,7 @@ use Data::Dumper;
     sub update {
 	my $icon_req = HTTP::Request->new(GET => this->{config}->{radar_url});
 	my $res = this->{ua}->request($icon_req);
+#	print "Got " . this->{config}->{radar_url} . " success: " . $res->is_success . " with code: " . $res->code() . " and size: " . length($res->content) . "\n";
 	if ($res->is_success) {
 	    #this->{radar_image} = Qt::Pixmap;
 	    #this->{radar_image}->loadFromData($res->content, length($res->content));
@@ -42,7 +43,8 @@ use Data::Dumper;
 	    this->{buffer}->open(Qt::Buffer::ReadWrite());
 	    this->{buffer}->writeData($res->content, length($res->content));
 #	    $buffer->setData($res->content, length($res->content));
-	    this->{radar_image} = Qt::Movie(this->{buffer});
+	    #this->{radar_image} = Qt::Movie(Qt::qVariantFromValue(Qt::qVariantFromValue(this->{buffer}), "Object"));
+	    this->{radar_image} = Qt::Movie(CAST(this->{buffer}, Qt::IODevice), Qt::ByteArray());
 #	    this->{radar_image}->setCacheMode(1);
 	    this->{radar}->setMovie(this->{radar_image});
 	    this->{radar_image}->start();
@@ -144,14 +146,16 @@ use Data::Dumper;
 	if ($res->is_success) {
 	    this->{current} = this->{xs}->XMLin($res->content);
 
-	    my $icon_req = HTTP::Request->new(GET => this->{current}->{icon_url_base} . this->{current}->{icon_url_name});
-	    $res = this->{ua}->request($icon_req);
-	    if ($res->is_success) {
-		this->{current}->{image} = Qt::Pixmap;
-		this->{current}->{image}->loadFromData($res->content, length($res->content));
+	    if (defined(this->{current}->{icon_url_base}) && defined(this->{current}->{icon_url_name})) {
+#		print "URL: '" .this->{current}->{icon_url_base} . this->{current}->{icon_url_name} . "'\n";
+		my $icon_req = HTTP::Request->new(GET => this->{current}->{icon_url_base} . this->{current}->{icon_url_name});
+		$res = this->{ua}->request($icon_req);
+		if ($res->is_success) {
+		    this->{current}->{image_pixmap} = Qt::Pixmap;
+		    this->{current}->{image_pixmap}->loadFromData($res->content, length($res->content));
+		}
 	    }
-	}
-	else {
+	} else {
 	    print $res->status_line, "\n";
 	}
 
@@ -183,7 +187,10 @@ use Data::Dumper;
 	this->{label}->{humidity}->setText(this->{current}->{relative_humidity} . ' %');
 	this->{label}->{dew_point}->setText(this->{current}->{'dewpoint_' . lc($unit_t)} . " " . uc($unit_t));
 	this->{label}->{visibility}->setText(this->{current}->{visibility_mi} . ' miles');
-	this->{label}->{image}->setPixmap(this->{current}->{image});
+	if (defined(this->{current}->{image_pixmap})) {
+#	    print Dumper(this->{current}->{image_pixmap});
+	    this->{label}->{image}->setPixmap(this->{current}->{image_pixmap});
+	}
 	if (defined(this->{window})) {
 	    this->{window}->setWindowTitle(this->{current}->{"temp_" . lc($unit_t)} . " " . uc($unit_t) . " / " . this->{current}->{weather});
 	}
